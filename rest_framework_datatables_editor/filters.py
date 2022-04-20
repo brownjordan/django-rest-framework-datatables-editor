@@ -1,7 +1,8 @@
 import re
 from copy import deepcopy
 
-from django.db.models import Q
+from django.db.models import CharField, Q, Value
+from django.db.models.functions import Concat
 
 from rest_framework.filters import BaseFilterBackend
 
@@ -28,10 +29,24 @@ class DatatablesFilterBackend(BaseFilterBackend):
         search_regex = getter('search[regex]') == 'true'
         search_value_arr = []
         if search_value and search_value != 'false':
-            search_value_arr = search_value.split(search_value)
+            search_value_arr = search_value.split()
+            
+        # concat the searchable columns into a single column for better multi-column matching with
+        # multiple search terms
+        search_field_list = []
+        for f in fields:
+            if f['searchable']:
+                for x in f['name']:
+                    search_field_list.append(x)
+                    search_field_list.append(Value(' '))
+        queryset = queryset.annotate(search_field=Concat(*search_field_list, output_field=CharField()))
 
         # filter queryset
         q = Q()
+        if not search_regex:
+            for search_value_token in search_value_arr:
+                q &= Q(**{'search_field__icontains': search_value_token})
+        
         for f in fields:
             if not f['searchable']:
                 continue
@@ -42,11 +57,6 @@ class DatatablesFilterBackend(BaseFilterBackend):
                         # param and create a string of 'ior' Q() objects.
                         for x in f['name']:
                             q |= Q(**{'%s__iregex' % x: search_value})
-                else:
-                    # same as above.
-                    for x in f['name']:
-                        for search_value_token in search_value_arr:
-                            q |= Q(**{'%s__icontains' % x: search_value_token})
             f_search_value = f.get('search_value')
             f_search_regex = f.get('search_regex') == 'true'
             if f_search_value:
