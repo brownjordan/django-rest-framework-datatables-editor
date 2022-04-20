@@ -26,6 +26,9 @@ class DatatablesFilterBackend(BaseFilterBackend):
         ordering = self.get_ordering(getter, fields)
         search_value = getter('search[value]')
         search_regex = getter('search[regex]') == 'true'
+        search_value_arr = []
+        if search_value and search_value != 'false':
+            search_value_arr = search_value.split(search_value)
 
         # filter queryset
         q = Q()
@@ -42,7 +45,8 @@ class DatatablesFilterBackend(BaseFilterBackend):
                 else:
                     # same as above.
                     for x in f['name']:
-                        q |= Q(**{'%s__icontains' % x: search_value})
+                        for search_value_token in search_value_arr:
+                            q |= Q(**{'%s__icontains' % x: search_value_token})
             f_search_value = f.get('search_value')
             f_search_regex = f.get('search_regex') == 'true'
             if f_search_value:
